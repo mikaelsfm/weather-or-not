@@ -2,7 +2,9 @@ package com.weatherornot.controller;
 
 import com.weatherornot.dto.AppointmentRequest;
 import com.weatherornot.dto.AppointmentResponse;
+import com.weatherornot.dto.RecommendationResponse;
 import com.weatherornot.service.AppointmentService;
+import com.weatherornot.service.RecommendationService;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -16,6 +18,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import java.net.URI;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Path("/appointments")
@@ -23,9 +26,11 @@ import java.util.List;
 @Produces(MediaType.APPLICATION_JSON)
 public class AppointmentController {
     private final AppointmentService service;
+    private final RecommendationService recommendationService;
 
-    public AppointmentController(AppointmentService service) {
+    public AppointmentController(AppointmentService service, RecommendationService recommendationService) {
         this.service = service;
+        this.recommendationService = recommendationService;
     }
 
     @GET
@@ -37,6 +42,14 @@ public class AppointmentController {
     @Path("/{id}")
     public AppointmentResponse get(@PathParam("id") Long id) {
         return service.get(id);
+    }
+
+    @GET
+    @Path("/{id}/recommendation")
+    public RecommendationResponse recommendation(@PathParam("id") Long id,
+                                                 @jakarta.ws.rs.QueryParam("start") LocalDateTime start) {
+        if (start == null) throw new IllegalArgumentException("Informe start no formato ISO-8601");
+        return recommendationService.calculate(id, start);
     }
 
     @POST

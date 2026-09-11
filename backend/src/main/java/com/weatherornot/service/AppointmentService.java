@@ -11,7 +11,6 @@ import jakarta.ws.rs.NotFoundException;
 import java.time.DayOfWeek;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class AppointmentService {
@@ -65,26 +64,29 @@ public class AppointmentService {
     }
 
     private void apply(AppointmentRequest source, Appointment target) {
-        target.name = source.name();
-        target.type = source.type();
-        target.startTime = source.startTime();
-        target.date = source.date();
-        target.locationName = source.locationName();
-        target.latitude = source.latitude();
-        target.longitude = source.longitude();
-        target.preparationMinutes = source.preparationMinutes();
-        target.travelMinutes = source.travelMinutes();
-        target.safetyMarginMinutes = source.safetyMarginMinutes();
-        target.recurring = source.recurring();
-        target.recurringDays = source.recurringDays() == null ? null : source.recurringDays().stream()
-                .map(DayOfWeek::getValue).sorted().map(String::valueOf).collect(Collectors.joining(","));
+        target.setName(source.name());
+        target.setStartTime(source.startTime());
+        target.setDate(source.date());
+        target.setRecurring(source.recurring());
+        target.setRecurringDays(source.recurringDays() == null ? Set.of() : Set.copyOf(source.recurringDays()));
+        AppointmentPlace.apply(source, target);
     }
 
     private AppointmentResponse toResponse(Appointment appointment) {
-        Set<DayOfWeek> days = appointment.recurrenceDays();
-        return new AppointmentResponse(appointment.id, appointment.name, appointment.type, appointment.startTime,
-                appointment.date, appointment.locationName, appointment.latitude, appointment.longitude,
-                appointment.preparationMinutes, appointment.travelMinutes, appointment.safetyMarginMinutes,
-                appointment.recurring, days);
+        var destination = appointment.getDestination();
+        return new AppointmentResponse(appointment.getId(), appointment.getName(), appointment.getStartTime(),
+                appointment.getDate(), destination.getDisplayName(), destination.getGooglePlaceId(),
+                destination.getLatitude(), destination.getLongitude(), appointment.isRecurring(), appointment.getRecurringDays());
+    }
+
+    private static final class AppointmentPlace {
+        private static void apply(AppointmentRequest source, Appointment target) {
+            var destination = new com.weatherornot.model.Place();
+            destination.setDisplayName(source.destinationName());
+            destination.setGooglePlaceId(source.destinationPlaceId());
+            destination.setLatitude(source.destinationLatitude());
+            destination.setLongitude(source.destinationLongitude());
+            target.setDestination(destination);
+        }
     }
 }

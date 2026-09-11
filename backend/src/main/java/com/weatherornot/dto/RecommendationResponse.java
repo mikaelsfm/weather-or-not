@@ -1,12 +1,15 @@
-package com.weatherornot.model;
+package com.weatherornot.dto;
+
+import com.weatherornot.model.ImpactLevel;
 
 import java.time.LocalDateTime;
 
-public record Recommendation(
+public record RecommendationResponse(
         LocalDateTime preparationTime,
         LocalDateTime departureTime,
         LocalDateTime estimatedArrivalTime,
         int trafficImpactMinutes,
-        WeatherImpact weatherImpact,
+        ImpactLevel weatherImpactLevel,
+        int weatherImpactMinutes,
         String reason) {
 }

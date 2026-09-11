@@ -15,7 +15,7 @@ class RecommendationEngineTest {
 
     @Test
     void calculatesNormalRecommendation() {
-        Recommendation recommendation = engine.calculate(appointment(), LocalDateTime.of(2026, 8, 17, 19, 0), WeatherImpact.none());
+        Recommendation recommendation = engine.calculate(30, 10, LocalDateTime.of(2026, 8, 17, 19, 0), 30, 30, WeatherImpact.none());
 
         assertEquals(LocalDateTime.of(2026, 8, 17, 17, 50), recommendation.preparationTime());
         assertEquals(LocalDateTime.of(2026, 8, 17, 18, 20), recommendation.departureTime());
@@ -25,18 +25,11 @@ class RecommendationEngineTest {
     @Test
     void addsWeatherImpactToTravelTime() {
         WeatherImpact rain = new WeatherImpact(ImpactLevel.HIGH, 15, "Chuva forte prevista durante o deslocamento");
-        Recommendation recommendation = engine.calculate(appointment(), LocalDateTime.of(2026, 8, 17, 19, 0), rain);
+        Recommendation recommendation = engine.calculate(30, 10, LocalDateTime.of(2026, 8, 17, 19, 0), 30, 30, rain);
 
         assertEquals(LocalDateTime.of(2026, 8, 17, 17, 35), recommendation.preparationTime());
         assertEquals(LocalDateTime.of(2026, 8, 17, 18, 5), recommendation.departureTime());
         assertEquals(LocalDateTime.of(2026, 8, 17, 18, 50), recommendation.estimatedArrivalTime());
     }
 
-    private Appointment appointment() {
-        Appointment appointment = new Appointment();
-        appointment.preparationMinutes = 30;
-        appointment.travelMinutes = 30;
-        appointment.safetyMarginMinutes = 10;
-        return appointment;
-    }
 }

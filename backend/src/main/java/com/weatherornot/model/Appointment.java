@@ -1,11 +1,9 @@
 package com.weatherornot.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -15,41 +13,29 @@ import java.util.Set;
 
 @Entity
 @Table(name = "appointments")
+@Getter
+@Setter
+@NoArgsConstructor
 public class Appointment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    public Long id;
+    private Long id;
 
     @Column(nullable = false)
-    public String name;
+    private String name;
 
     @Column(nullable = false)
-    public String type;
+    private LocalTime startTime;
 
-    @Column(nullable = false)
-    public LocalTime startTime;
+    private LocalDate date;
+    private boolean recurring;
 
-    public LocalDate date;
-    public String locationName;
-    public Double latitude;
-    public Double longitude;
-    public int preparationMinutes;
-    public int travelMinutes;
-    public int safetyMarginMinutes;
-    public boolean recurring;
+    @ElementCollection(targetClass = DayOfWeek.class)
+    @CollectionTable(name = "appointment_recurrence_days", joinColumns = @JoinColumn(name = "appointment_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "day_of_week", nullable = false)
+    private Set<DayOfWeek> recurringDays = EnumSet.noneOf(DayOfWeek.class);
 
-    // Stored as comma-separated ISO-8601 day numbers (for example, "1,3,5").
-    @Column(length = 32)
-    public String recurringDays;
-
-    public Set<DayOfWeek> recurrenceDays() {
-        if (recurringDays == null || recurringDays.isBlank()) {
-            return EnumSet.noneOf(DayOfWeek.class);
-        }
-        Set<DayOfWeek> result = EnumSet.noneOf(DayOfWeek.class);
-        for (String value : recurringDays.split(",")) {
-            result.add(DayOfWeek.of(Integer.parseInt(value)));
-        }
-        return result;
-    }
+    @Embedded
+    private Place destination;
 }
