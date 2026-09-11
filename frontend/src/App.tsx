@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { appointmentsApi } from './api'
-import type { Appointment, AppointmentPayload, Weekday } from './types'
+import { appointmentsApi, routineSettingsApi } from './api'
+import type { Appointment, AppointmentPayload, Recommendation, RoutineSettings, Weekday } from './types'
 
 const weekdays: { value: Weekday; label: string }[] = [
   { value: 'MONDAY', label: 'Seg' }, { value: 'TUESDAY', label: 'Ter' },
@@ -9,8 +9,13 @@ const weekdays: { value: Weekday; label: string }[] = [
 ]
 
 const emptyForm = (): AppointmentPayload => ({
-  name: '', type: '', startTime: '19:00', date: null, locationName: '', latitude: null, longitude: null,
-  preparationMinutes: 30, travelMinutes: 30, safetyMarginMinutes: 10, recurring: true, recurringDays: ['MONDAY'],
+  name: '', startTime: '19:00', date: null, destinationName: '', destinationPlaceId: null,
+  destinationLatitude: null, destinationLongitude: null, recurring: true, recurringDays: ['MONDAY'],
+})
+
+const emptyRoutineSettings = (): RoutineSettings => ({
+  homeName: '', homePlaceId: null, homeLatitude: null, homeLongitude: null,
+  preparationMinutes: 30, safetyMarginMinutes: 10,
 })
 
 const dayLabel = (day: Weekday) => weekdays.find((item) => item.value === day)?.label ?? day
@@ -22,6 +27,9 @@ function App() {
   const [isEditorOpen, setEditorOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [routineSettings, setRoutineSettings] = useState<RoutineSettings>(emptyRoutineSettings)
+  const [isRoutineEditorOpen, setRoutineEditorOpen] = useState(false)
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
   const [error, setError] = useState('')
 
   const nextAppointment = useMemo(() => appointments[0], [appointments])
@@ -38,7 +46,10 @@ function App() {
     }
   }
 
-  useEffect(() => { void loadAppointments() }, [])
+  useEffect(() => {
+    void loadAppointments()
+    void routineSettingsApi.get().then(setRoutineSettings).catch(() => undefined)
+  }, [])
 
   function openCreate() {
     setSelected(null)
@@ -101,11 +112,36 @@ function App() {
     }
   }
 
+  async function saveRoutineSettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    try {
+      setSaving(true)
+      setRoutineSettings(await routineSettingsApi.save(routineSettings))
+      setRoutineEditorOpen(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível salvar sua rotina.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function calculateRecommendation(appointment: Appointment) {
+    try {
+      setSaving(true)
+      setError('')
+      setRecommendation(await appointmentsApi.recommendation(appointment.id, nextOccurrenceStart(appointment)))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível calcular a rota.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <a className="brand" href="/" aria-label="Weather or Not, início"><span>◒</span> weather or not</a>
-        <button className="button button-primary" onClick={openCreate}>+ Novo compromisso</button>
+        <div className="row-actions"><button className="button button-secondary" onClick={() => setRoutineEditorOpen(true)}>Minha rotina</button><button className="button button-primary" onClick={openCreate}>+ Novo compromisso</button></div>
       </header>
 
       <section className="intro">
@@ -120,12 +156,10 @@ function App() {
         <div className="card-header"><p className="eyebrow">PRÓXIMO COMPROMISSO</p><span className="status">EM BREVE</span></div>
         {nextAppointment ? <>
           <h2 id="next-title">{nextAppointment.name}</h2>
-          <p className="appointment-meta">{nextAppointment.type} · {nextAppointment.startTime.slice(0, 5)}{nextAppointment.locationName ? ` · ${nextAppointment.locationName}` : ''}</p>
-          <div className="recommendation-grid">
-            <div><span>COMEÇAR A SE PREPARAR</span><strong>{subtractMinutes(nextAppointment.startTime, nextAppointment.travelMinutes + nextAppointment.safetyMarginMinutes + nextAppointment.preparationMinutes)}</strong></div>
-            <div><span>SAIR DE CASA</span><strong>{subtractMinutes(nextAppointment.startTime, nextAppointment.travelMinutes + nextAppointment.safetyMarginMinutes)}</strong></div>
-          </div>
-          <p className="muted">Horários calculados com o tempo normal de deslocamento e a margem de segurança.</p>
+          <p className="appointment-meta">{nextAppointment.startTime.slice(0, 5)} · {nextAppointment.destinationName}</p>
+          <div className="recommendation-grid">{recommendation ? <><div><span>COMEÇAR A SE PREPARAR</span><strong>{formatTime(recommendation.preparationTime)}</strong></div><div><span>SAIR DE CASA</span><strong>{formatTime(recommendation.departureTime)}</strong></div></> : <><div><span>RECOMENDAÇÃO</span><strong>Calcule sua rota</strong></div><div><span>TRÂNSITO</span><strong>Consultado sob demanda</strong></div></>}</div>
+          <p className="muted">{recommendation ? recommendation.reason : 'O backend calcula a rota entre sua origem e este destino usando o Google Maps.'}</p>
+          <button className="text-button" disabled={saving} onClick={() => void calculateRecommendation(nextAppointment)}>Calcular recomendação →</button>
         </> : <div className="empty-hero"><h2 id="next-title">Sua agenda está livre</h2><p>Cadastre um compromisso para começar a planejar sua rotina.</p><button className="text-button" onClick={openCreate}>Cadastrar agora →</button></div>}
       </section>
 
@@ -134,7 +168,7 @@ function App() {
         {loading ? <p className="loading">Carregando agenda…</p> : appointments.length === 0 ? <p className="loading">Nenhum compromisso cadastrado.</p> : <div className="appointment-list">
           {appointments.map((appointment) => <article className="appointment-row" key={appointment.id}>
             <time>{appointment.startTime.slice(0, 5)}</time>
-            <div><h3>{appointment.name}</h3><p>{appointment.type} · {appointment.recurring ? appointment.recurringDays.map(dayLabel).join(', ') : formatDate(appointment.date)}{appointment.locationName ? ` · ${appointment.locationName}` : ''}</p></div>
+            <div><h3>{appointment.name}</h3><p>{appointment.recurring ? appointment.recurringDays.map(dayLabel).join(', ') : formatDate(appointment.date)} · {appointment.destinationName}</p></div>
             <div className="row-actions"><button onClick={() => openEdit(appointment)}>Editar</button><button className="danger" onClick={() => void remove(appointment)}>Excluir</button></div>
           </article>)}
         </div>}
@@ -143,20 +177,41 @@ function App() {
       {isEditorOpen && <div className="dialog-backdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-labelledby="editor-title">
         <div className="editor-heading"><div><p className="eyebrow">{selected ? 'ATUALIZAR AGENDA' : 'NOVA ROTINA'}</p><h2 id="editor-title">{selected ? 'Editar compromisso' : 'Adicionar compromisso'}</h2></div><button className="close" aria-label="Fechar" onClick={() => setEditorOpen(false)}>×</button></div>
         <form onSubmit={(event) => void save(event)}>
-          <div className="form-grid"><label>Nome<input required value={form.name} onChange={(event) => updateField('name', event.target.value)} placeholder="Ex.: Faculdade" /></label><label>Tipo<input required value={form.type} onChange={(event) => updateField('type', event.target.value)} placeholder="Ex.: Aula" /></label><label>Horário<input required type="time" value={form.startTime} onChange={(event) => updateField('startTime', event.target.value)} /></label><label>Local<input value={form.locationName ?? ''} onChange={(event) => updateField('locationName', event.target.value)} placeholder="Ex.: Universidade" /></label></div>
+          <div className="form-grid"><label>Nome<input required value={form.name} onChange={(event) => updateField('name', event.target.value)} placeholder="Ex.: Faculdade" /></label><label>Horário<input required type="time" value={form.startTime} onChange={(event) => updateField('startTime', event.target.value)} /></label><label>Destino<input required value={form.destinationName} onChange={(event) => updateField('destinationName', event.target.value)} placeholder="Ex.: Universidade" /></label><label>Google Place ID <span>(por enquanto)</span><input value={form.destinationPlaceId ?? ''} onChange={(event) => updateField('destinationPlaceId', event.target.value || null)} placeholder="ChIJ..." /></label></div>
           <fieldset><legend>Repetição</legend><label className="switch-line"><input type="checkbox" checked={form.recurring} onChange={(event) => updateField('recurring', event.target.checked)} /> Repetir semanalmente</label>{form.recurring ? <div className="day-picker">{weekdays.map((day) => <button type="button" key={day.value} className={form.recurringDays.includes(day.value) ? 'selected' : ''} onClick={() => toggleDay(day.value)}>{day.label}</button>)}</div> : <label>Data<input required type="date" value={form.date ?? ''} onChange={(event) => updateField('date', event.target.value || null)} /></label>}</fieldset>
-          <fieldset><legend>Seu tempo</legend><div className="form-grid three"><label>Preparação <span>(min)</span><input min="0" type="number" value={form.preparationMinutes} onChange={(event) => updateField('preparationMinutes', Number(event.target.value))} /></label><label>Deslocamento <span>(min)</span><input min="0" type="number" value={form.travelMinutes} onChange={(event) => updateField('travelMinutes', Number(event.target.value))} /></label><label>Margem <span>(min)</span><input min="0" type="number" value={form.safetyMarginMinutes} onChange={(event) => updateField('safetyMarginMinutes', Number(event.target.value))} /></label></div></fieldset>
           {error && <p className="form-error" role="alert">{error}</p>}<div className="form-actions"><button type="button" className="button button-secondary" onClick={() => setEditorOpen(false)}>Cancelar</button><button className="button button-primary" disabled={saving}>{saving ? 'Salvando…' : 'Salvar compromisso'}</button></div>
+        </form>
+      </section></div>}
+      {isRoutineEditorOpen && <div className="dialog-backdrop" role="presentation"><section className="editor" role="dialog" aria-modal="true" aria-labelledby="routine-editor-title">
+        <div className="editor-heading"><div><p className="eyebrow">SUA ROTINA</p><h2 id="routine-editor-title">Origem e tempos</h2></div><button className="close" aria-label="Fechar" onClick={() => setRoutineEditorOpen(false)}>×</button></div>
+        <form onSubmit={(event) => void saveRoutineSettings(event)}>
+          <div className="form-grid"><label>Origem<input required value={routineSettings.homeName} onChange={(event) => setRoutineSettings((current) => ({ ...current, homeName: event.target.value }))} placeholder="Ex.: Minha casa" /></label><label>Google Place ID<input value={routineSettings.homePlaceId ?? ''} onChange={(event) => setRoutineSettings((current) => ({ ...current, homePlaceId: event.target.value || null }))} placeholder="ChIJ..." /></label><label>Preparação <span>(min)</span><input min="0" type="number" value={routineSettings.preparationMinutes} onChange={(event) => setRoutineSettings((current) => ({ ...current, preparationMinutes: Number(event.target.value) }))} /></label><label>Margem <span>(min)</span><input min="0" type="number" value={routineSettings.safetyMarginMinutes} onChange={(event) => setRoutineSettings((current) => ({ ...current, safetyMarginMinutes: Number(event.target.value) }))} /></label></div>
+          <p className="muted">A busca automática de Place ID será adicionada com autocomplete; por ora informe o identificador ou configure coordenadas pela API.</p>
+          <div className="form-actions"><button type="button" className="button button-secondary" onClick={() => setRoutineEditorOpen(false)}>Cancelar</button><button className="button button-primary" disabled={saving}>{saving ? 'Salvando…' : 'Salvar rotina'}</button></div>
         </form>
       </section></div>}
     </main>
   )
 }
 
-function subtractMinutes(time: string, minutes: number) {
-  const [hour, minute] = time.split(':').map(Number)
-  const date = new Date(2000, 0, 1, hour, minute - minutes)
-  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+function nextOccurrenceStart(appointment: Appointment) {
+  if (!appointment.recurring && appointment.date) return `${appointment.date}T${appointment.startTime}`
+  const candidate = new Date()
+  const [hour, minute] = appointment.startTime.split(':').map(Number)
+  const weekdayByValue: Record<Weekday, number> = { MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6, SUNDAY: 0 }
+  for (let offset = 0; offset < 7; offset += 1) {
+    const date = new Date(candidate)
+    date.setDate(candidate.getDate() + offset)
+    date.setHours(hour, minute, 0, 0)
+    if (appointment.recurringDays.some((day) => weekdayByValue[day] === date.getDay()) && date >= candidate) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${appointment.startTime}`
+    }
+  }
+  return `${candidate.getFullYear()}-${String(candidate.getMonth() + 1).padStart(2, '0')}-${String(candidate.getDate()).padStart(2, '0')}T${appointment.startTime}`
+}
+
+function formatTime(value: string) {
+  return value.slice(11, 16)
 }
 
 function formatDate(date: string | null) {

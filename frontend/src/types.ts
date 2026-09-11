@@ -10,17 +10,33 @@ export type Weekday =
 export type Appointment = {
   id: number
   name: string
-  type: string
   startTime: string
   date: string | null
-  locationName: string | null
-  latitude: number | null
-  longitude: number | null
-  preparationMinutes: number
-  travelMinutes: number
-  safetyMarginMinutes: number
+  destinationName: string
+  destinationPlaceId: string | null
+  destinationLatitude: number | null
+  destinationLongitude: number | null
   recurring: boolean
   recurringDays: Weekday[]
 }
 
 export type AppointmentPayload = Omit<Appointment, 'id'>
+
+export type RoutineSettings = {
+  homeName: string
+  homePlaceId: string | null
+  homeLatitude: number | null
+  homeLongitude: number | null
+  preparationMinutes: number
+  safetyMarginMinutes: number
+}
+
+export type Recommendation = {
+  preparationTime: string
+  departureTime: string
+  estimatedArrivalTime: string
+  trafficImpactMinutes: number
+  weatherImpactLevel: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'SEVERE'
+  weatherImpactMinutes: number
+  reason: string
+}
